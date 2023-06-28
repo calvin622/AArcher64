@@ -1,2 +1,7 @@
 venv/
+.vscode/
+aarcher64/__pycache__/
 notes.txt
+binaries/
+aarcher64/angr_testing.py
+aarcher64/roptool.py
