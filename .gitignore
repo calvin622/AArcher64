@@ -5,3 +5,4 @@ notes.txt
 binaries/
 aarcher64/angr_testing.py
 aarcher64/roptool.py
+aarcher64/regitser_changes.py
