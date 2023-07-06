@@ -26,13 +26,12 @@ def extract_gadgets(project, simgr):
     gadgets = []
 
     while simgr.active:
+
         simgr.step()
 
-        unconstrained_states = [s for s in simgr.active if s.satisfiable()]
+        for state in simgr.active:
 
-        for unconstrained_state in unconstrained_states:
-            gadgets.extend(process_unconstrained_state(
-                project, unconstrained_state))
+            gadgets.extend(process_unconstrained_state(project, state))
 
     return gadgets
 
@@ -47,6 +46,7 @@ def print_gadgets(gadgets):
             print(f"--- Gadget {i + 1} {gadget.address} ---")
             print(f"Number of instructions: {gadget.length}")
             print(f"Controlled registers: {gadget.controlled_registers}")
+            print(f"Constraint solutions: {gadget.constraint_solutions}")
             print(gadget.instructions())
     else:
         print("No gadgets found.")
@@ -55,20 +55,22 @@ def print_gadgets(gadgets):
 def execute_binary(binary_path):
     try:
         project = angr.Project(binary_path, auto_load_libs=False)
-        entry_point = project.loader.main_object.get_symbol(
-            "main").rebased_addr
-        state = project.factory.blank_state(addr=entry_point)
+
+        state = project.factory.entry_state(stdin=angr.SimFile)
         return_address = claripy.BVS("return_address", project.arch.bits)
         frame_pointer = claripy.BVS("frame_pointer", project.arch.bits)
         state = set_registers_symbolic(
             state, return_address, frame_pointer, project)
+
         simgr = project.factory.simgr(state)
+
         gadgets = extract_gadgets(project, simgr)
+
         print_gadgets(gadgets)
     except Exception as e:
         print("An error occurred:", e)
 
 
 if __name__ == "__main__":
-    binary_path = "/home/ubuntu/AArcher64/binaries/binary"
+    binary_path = "/home/ubuntu/AArcher64/binaries/bof642"
     execute_binary(binary_path)
