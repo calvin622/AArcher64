@@ -7,10 +7,10 @@ class Gadget:
         Represents a gadget with its address, instructions, length, and controlled registers.
         """
         self.address = address
-        self.instructions = instructions
+        self.instructions = list(instructions)
         self.length = length
         self.controlled_registers = controlled_registers
-        self.constraint_solutions = constraint_solutions
+        self.constraint_solutions = list(constraint_solutions)
 
 
 def analyse_controlled_registers(project, state, address):
@@ -25,12 +25,8 @@ def analyse_controlled_registers(project, state, address):
 
     final_state = simgr.active[0] if simgr.active else None
     if final_state:
-        # Check for changed registers **this is slow**
-        changed_registers = [
-            reg_name
-            for reg_name in [f'x{i}' for i in range(31)]
-            if state.solver.eval(final_state.regs.get(reg_name)) != state.solver.eval(state.regs.get(reg_name))
-        ]
+        # Check for changed registers (this is slow)
+        changed_registers = get_changed_registers(final_state, state)
 
         # Check if the sp register has changed
         if state.solver.eval(final_state.regs.sp) != state.solver.eval(sp_before):
@@ -39,37 +35,69 @@ def analyse_controlled_registers(project, state, address):
     return changed_registers
 
 
+def get_changed_registers(final_state, state):
+    """
+    Check for changed registers between final_state and state.
+    """
+    return [
+        reg_name
+        for reg_name in [f'x{i}' for i in range(31)]
+        if state.solver.eval(final_state.regs.get(reg_name)) != state.solver.eval(state.regs.get(reg_name))
+    ]
+
+
 def process_unconstrained_state(project, unconstrained_state):
     """
     Process an unconstrained state and extract gadgets from it.
     """
     instruction_addr = unconstrained_state.regs.ip
+    addr = unconstrained_state.solver.eval(instruction_addr)
     controlled_registers = analyse_controlled_registers(
         project, unconstrained_state.copy(), instruction_addr)
 
-    addr = unconstrained_state.solver.eval(instruction_addr)
-    block = project.factory.block(addr=addr)
-    num_ins = block.instructions
+    constraint_solutions = []
+    block_list = [create_block(project, addr)]
+
+    num_ins = block_list[0].instructions
 
     if num_ins > 0:
-        constraint_solutions = solve_constraints(
+        constraints = find_constraints(
             project, unconstrained_state.copy())
-        gadget = Gadget(instruction_addr, block.pp, num_ins,
-                        controlled_registers, constraint_solutions)
+        for constraint in constraints:
+            address = unconstrained_state.solver.eval(constraint.regs.ip)
+            block_list.append(create_block(project, address))
+            constraint_solutions.append(solve_constraints(constraint))
+            controlled_registers.extend(analyse_controlled_registers(project, constraint, constraint.regs.ip))
+        gadget = Gadget(hex(addr), block_list, num_ins, controlled_registers, constraint_solutions)
         return [gadget]
 
     return []
 
 
-def solve_constraints(project, state):
+def find_constraints(project, state):
+    """
+    Find constraint states from a given state.
+    """
     simgr = project.factory.simgr(state)
-    constraint_solutions = []
-
+    constraint_states = []
     simgr.step()
     if len(simgr.active) >= 2:
-        for state in simgr.active:
-            input_data = state.posix.stdin.load(0, state.posix.stdin.size)
-            constraint_solutions.append(
-                state.solver.eval(input_data, cast_to=bytes))
+        constraint_states.extend(simgr.active)
+    return constraint_states
 
-    return constraint_solutions
+
+def solve_constraints(state):
+    """
+    Solve constraints and return the solution.
+    """
+    input_data = state.posix.stdin.load(0, state.posix.stdin.size)
+    solution = state.solver.eval(input_data, cast_to=bytes)
+    return solution
+
+
+def create_block(project, addr):
+    """
+    Create a block for the specified address in the project.
+    """
+    block = project.factory.block(addr=addr)
+    return block
