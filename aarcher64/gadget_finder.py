@@ -20,20 +20,19 @@ def set_registers_symbolic(state, return_address, frame_pointer, project):
 
 
 def extract_gadgets(project, simgr):
-    """
-    Extract gadgets from the given project and simulation manager.
-    """
     gadgets = []
 
     while simgr.active:
-
         simgr.step()
 
         for state in simgr.active:
-
-            gadgets.extend(process_unconstrained_state(project, state))
+            addr = state.solver.eval(state.regs.ip)
+            
+            if not any(addr in block.instruction_addrs for gadget in gadgets for block in gadget.instructions):
+                gadgets.extend(process_unconstrained_state(project, state))
 
     return gadgets
+
 
 
 def print_gadgets(gadgets):
@@ -46,8 +45,17 @@ def print_gadgets(gadgets):
             print(f"--- Gadget {i + 1} {gadget.address} ---")
             print(f"Number of instructions: {gadget.length}")
             print(f"Controlled registers: {gadget.controlled_registers}")
-            print(f"Constraint solutions: {gadget.constraint_solutions}")
-            print(gadget.instructions())
+            for num, solution in enumerate(gadget.constraint_solutions, start=1):
+                print(f"Constraint solution {num}: {solution}")
+            sorted_blocks = sorted(gadget.instructions,
+                                   key=lambda block: block.addr)
+
+            for index, block in enumerate(sorted_blocks):
+                if index > 0:
+                    print(f"Constraint {index}")
+                
+                instructions = block.pp()
+
     else:
         print("No gadgets found.")
 
@@ -63,7 +71,6 @@ def execute_binary(binary_path):
             state, return_address, frame_pointer, project)
 
         simgr = project.factory.simgr(state)
-
         gadgets = extract_gadgets(project, simgr)
 
         print_gadgets(gadgets)
