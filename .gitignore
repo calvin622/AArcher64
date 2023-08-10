@@ -3,6 +3,6 @@ venv/
 aarcher64/__pycache__/
 notes.txt
 binaries/
-aarcher64/angr_testing.py
-aarcher64/roptool.py
-aarcher64/regitser_changes.py
+aarcher64/other/angr_testing.py
+aarcher64/other/roptool.py
+aarcher64/other/regitser_changes.py

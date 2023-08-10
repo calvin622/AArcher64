@@ -1,16 +1,18 @@
 
-import re
+import re, pyvex
+
 
 class Gadget:
-    def __init__(self, address, instructions, length, controlled_registers, constraint_solutions):
+    def __init__(self, address, instructions, length, controlled_registers, constraint_solutions, return_type):
         """
         Represents a gadget with its address, instructions, length, controlled registers, and constraints.
         """
         self.address = address
         self.instructions = list(instructions)
         self.length = length
-        self.controlled_registers = controlled_registers
+        self.controlled_registers = list(set(controlled_registers))
         self.constraint_solutions = list(constraint_solutions)
+        self.return_type = return_type
 
 
 def analyse_controlled_registers(block):
@@ -26,32 +28,64 @@ def analyse_controlled_registers(block):
             registers.append(match)
 
     return registers
+
+def analyse_return_type(block):
+    """
+    Find return type.
+    """
+    irsb = block.vex
+    return_type = irsb.jumpkind
     
+    return return_type
+
+
 def process_unconstrained_state(project, unconstrained_state):
-    """
-    Process an unconstrained state and extract gadgets from it.
-    """
     instruction_addr = unconstrained_state.regs.ip
     addr = unconstrained_state.solver.eval(instruction_addr)
-    
-    constraint_solutions = []
+
     block_list = [create_block(project, addr)]
 
-    controlled_registers = analyse_controlled_registers(block_list[0])
+    if block_list and block_list[0].instructions > 1:
+        controlled_registers = analyse_controlled_registers(block_list[0])
+        return_type = analyse_return_type(block_list[0])
+        return addr, block_list, controlled_registers, return_type
 
-    num_ins = block_list[0].instructions
+    return None
 
-    if num_ins > 0:
-        constraints = find_constraints(
-            project, unconstrained_state.copy())
+
+def analyse_gadget_fast(project, unconstrained_state):
+    result = process_unconstrained_state(project, unconstrained_state)
+    if result:
+        addr, block_list, controlled_registers, return_type = result
+        total_instructions = sum(blocks.instructions for blocks in block_list)
+        if total_instructions > 1 and 'xsp' in controlled_registers:
+            return [Gadget(hex(addr), block_list, total_instructions, controlled_registers, return_type, [])]
+
+    return []
+
+
+def analyse_gadget_slow(project, unconstrained_state):
+    result = process_unconstrained_state(project, unconstrained_state)
+
+    if result:
+        addr, block_list, controlled_registers, return_type = result
+        constraint_solutions = []
+
+        constraints = find_constraints(project, unconstrained_state.copy())
+
         for constraint in constraints:
             address = unconstrained_state.solver.eval(constraint.regs.ip)
             block = create_block(project, address)
             block_list.append(block)
+
             constraint_solutions.append(solve_constraints(constraint))
             controlled_registers.extend(analyse_controlled_registers(block))
-        gadget = Gadget(hex(addr), block_list, num_ins, controlled_registers, constraint_solutions)
-        return [gadget]
+        total_instructions = sum(blocks.instructions for blocks in block_list)
+        if total_instructions > 1 and 'xsp' in controlled_registers:
+            return [
+                Gadget(hex(addr), block_list, total_instructions,
+                        controlled_registers, constraint_solutions, return_type)
+            ]
 
     return []
 
