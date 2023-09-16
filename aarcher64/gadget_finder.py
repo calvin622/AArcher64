@@ -1,7 +1,7 @@
 import angr
 import claripy
 # Import the function from the separate file
-from analyse_gadgets import analyse_gadget_fast, analyse_gadget_slow
+from analyse_gadgets import analyse_gadget
 
 
 def set_registers_symbolic(state, return_address, frame_pointer, project):
@@ -19,28 +19,18 @@ def set_registers_symbolic(state, return_address, frame_pointer, project):
     return state
 
 
-def extract_gadgets(project, simgr, menu_option):
+def extract_gadgets(project, simgr, mode):
     gadgets = []
     gadgets_analysed = 0
-
     while simgr.active:
         simgr.step()
         for state in simgr.active:
             addr = state.solver.eval(state.regs.ip)
-
             if not any(addr in block.instruction_addrs for gadget in gadgets for block in gadget.instructions):
-                if menu_option == "fast":
-                    gadgets.extend(analyse_gadget_fast(project, state))
-                elif menu_option == "slow":
-                    gadgets.extend(analyse_gadget_slow(project, state))
-                else:
-                    raise ValueError("Invalid menu option")
-                
+                gadgets.extend(analyse_gadget(project, state, mode))
                 gadgets_analysed += 1
-                print(f"gadgets analysed: {gadgets_analysed}", end="\r")
-
+                print(f"gadgets analysed: {gadgets_analysed}", end="\\r")
     return gadgets
-
 
 
 def print_gadgets(gadgets):
@@ -53,6 +43,8 @@ def print_gadgets(gadgets):
             print(f"--- Gadget {i} {gadget.address} ---")
             print(f"Number of instructions: {gadget.length}")
             print(f"Controlled registers: {gadget.controlled_registers}")
+            print(f"Controllable registers: {gadget.controllable_registers}")
+            print(f"sp difference: {hex(gadget.sp_difference)}")
             for num, solution in enumerate(gadget.constraint_solutions, start=1):
                 print(f"Constraint solution {num}: {solution}")
             print(f"Type of Return: {gadget.return_type}")
@@ -70,24 +62,18 @@ def print_gadgets(gadgets):
 
 def create_simgr(project):
     try:
-
         state = project.factory.entry_state(stdin=angr.SimFile)
-        return_address = claripy.BVS("return_address", project.arch.bits)
-        frame_pointer = claripy.BVS("frame_pointer", project.arch.bits)
-        #state = set_registers_symbolic(state, return_address, frame_pointer, project)
-
         simgr = project.factory.simgr(state)
-        # gadgets = extract_gadgets(project, simgr)
         return simgr
-
-        # print_gadgets(gadgets)
     except Exception as e:
-        print("An error occurred:", e)
-
+        print(f"Error in create_simgr: {e}")
+        return None
 
 def initialise_project(binary_path):
     try:
         project = angr.Project(binary_path, auto_load_libs=False)
         return project
     except Exception as e:
-        print("An error occurred:", e)
+        print(f"Error in initialise_project: {e}")
+        return None
+
