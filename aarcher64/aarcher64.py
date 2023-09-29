@@ -1,51 +1,68 @@
-from gadget_finder import create_simgr, initialise_project, extract_gadgets, print_gadgets
+from gadget_finder import GadgetExtractor  # Adjusted import to reflect previous code change
 
+from config_utils import load_config
 
-def initialize_project_simgr():
-    # Get the path to the binary from the user
-    binary_path = input("Enter the path to the binary: ")
+class GadgetSearcher:
+    def __init__(self):
+        self.extractor = None
+        self.simgr = None
+        self.config = load_config()
 
-    # Initialize the project with the provided binary path
-    project = initialise_project(binary_path)
+    def initialize_project_simgr(self):
+        binary_path = input("Enter the path to the binary: ")
+        self.extractor = GadgetExtractor(GadgetExtractor.initialize_project(binary_path))
+        self.simgr = self.extractor.create_simgr(self.extractor.project)
 
-    # Create a simulation manager for the project
-    simgr = create_simgr(project)
+    def search_gadgets(self, mode):
+        gadgets = self.extractor.extract_gadgets(self.simgr, mode)
+        self.extractor.print_gadgets(gadgets)
 
-    return project, simgr
+    def get_mode(self):
+        mode = self.config.enable_contraint_finding
+        return mode
 
+    @staticmethod
+    def print_menu():
+        print("Menu:")
+        print("1. Search Binary")
+        print("2. Quit")
 
-def search_gadgets(project, simgr, mode):
-    gadgets = extract_gadgets(project, simgr, mode)
-    print_gadgets(gadgets)
+    @staticmethod
+    def get_user_choice():
+        valid_choices = {1, 2}
+       
+        
+        while True:
+            try:
+                choice = int(input("Enter your choice (1-2): ").strip())
+            except ValueError:
+                print("Invalid choice. Please enter a number.")
+                continue  # Skip the rest of the loop and ask for the choice again
+            
+            if choice not in valid_choices:
+                print("Invalid choice. Please try again.")
+                continue  # Skip the rest of the loop and ask for the choice again
 
-
-def print_menu():
-    # Display the menu options
-    print("Menu:")
-    print("1. Fast search (no constraint solving)")
-    print("2. Slow search (constraint solving)")
-    print("3. Quit")
-
-
-def get_user_choice():
-    while True:
-        # Get user input for the menu choice
-        choice = input("Enter your choice (1-3): ")
-        if choice in ["1", "2", "3"]:
-            return choice
-        else:
-            print("Invalid choice. Please try again.")
+            if choice in valid_choices:
+                return choice
+            
+            if choice == 2:
+                return 0, choice
+            
+            else:
+                print("Invalid instruction count. Please try again.")
 
 
 if __name__ == "__main__":
+    searcher = GadgetSearcher()
     while True:
-        # Display the menu
-        print_menu()
-        choice = get_user_choice()
-        if choice in ["1", "2"]:
-            project, simgr = initialize_project_simgr()
-            mode = "fast" if choice == "1" else "slow"
-            search_gadgets(project, simgr, mode)
-        elif choice == "3":
+        searcher.print_menu()
+        choice = searcher.get_user_choice()  # Assuming get_user_choice now returns ints
+        if choice in {1}:
+            searcher.initialize_project_simgr()
+            mode = searcher.get_mode()
+            searcher.search_gadgets(mode)
+        elif choice == 2:
             print("Exiting...")
             break
+
